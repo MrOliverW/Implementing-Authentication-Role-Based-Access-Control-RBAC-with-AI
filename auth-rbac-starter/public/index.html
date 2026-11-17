@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AuthN & RBAC Security Testbench</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; background: #f8fafc; color: #0f172a; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+    .card { background: #fff; padding: 1.25rem; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    h2 { margin-top: 0; font-size: 1.1rem; }
+    label { display: block; font-size: 0.85rem; margin-bottom: 0.25rem; font-weight: 600; }
+    input, select { width: 100%; padding: 0.5rem; margin-bottom: 0.75rem; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; }
+    button { padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; background: #2563eb; color: white; }
+    button:hover { background: #1d4ed8; }
+    button.secondary { background: #475569; }
+    button.danger { background: #dc2626; }
+    .btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    pre { background: #0f172a; color: #38bdf8; padding: 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; min-height: 100px; }
+    .status-badge { display: inline-block; padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; background: #e2e8f0; }
+  </style>
+</head>
+<body>
+  <h1>AuthN & RBAC Security Testbench</h1>
+  <p>Current Session State: <span id="sessionState" class="status-badge">Unauthenticated (Guest)</span></p>
+
+  <div class="grid">
+    <!-- Registration Form -->
+    <div class="card">
+      <h2>1. Register Account</h2>
+      <form id="registerForm">
+        <label for="regUser">Username</label>
+        <input type="text" id="regUser" placeholder="alice" required />
+        <label for="regPass">Password (min 8 chars)</label>
+        <input type="password" id="regPass" placeholder="••••••••" required />
+        <label for="regRole">Role</label>
+        <select id="regRole">
+          <option value="User">User</option>
+          <option value="Admin">Admin</option>
+        </select>
+        <button type="submit">Register</button>
+      </form>
+    </div>
+
+    <!-- Login / Logout Form -->
+    <div class="card">
+      <h2>2. Login / Logout</h2>
+      <form id="loginForm">
+        <label for="loginUser">Username</label>
+        <input type="text" id="loginUser" placeholder="alice" required />
+        <label for="loginPass">Password</label>
+        <input type="password" id="loginPass" placeholder="••••••••" required />
+        <div class="btn-group">
+          <button type="submit">Login</button>
+          <button type="button" id="logoutBtn" class="danger">Logout</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Endpoint Tester -->
+  <div class="card">
+    <h2>3. Test Role-Based Endpoints</h2>
+    <p style="font-size: 0.9rem; color: #475569;">Test positive paths and negative security vectors (e.g., clicking Admin endpoint while logged in as a User).</p>
+    <div class="btn-group" style="margin-bottom: 1rem;">
+      <button type="button" class="secondary" onclick="callApi('/api/public')">GET /api/public (Public)</button>
+      <button type="button" onclick="callApi('/api/profile')">GET /api/profile (User & Admin)</button>
+      <button type="button" class="danger" onclick="callApi('/api/admin/users')">GET /api/admin/users (Admin Only)</button>
+    </div>
+    <label>Server Response:</label>
+    <pre id="output">// API responses will appear here...</pre>
+  </div>
+
+  <script>
+    const output = document.getElementById('output');
+    const sessionState = document.getElementById('sessionState');
+
+    function logResponse(endpoint, status, data) {
+      output.textContent = `Endpoint: ${endpoint}\nHTTP Status: ${status}\n\n${JSON.stringify(data, null, 2)}`;
+    }
+
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {
+        username: document.getElementById('regUser').value,
+        password: document.getElementById('regPass').value,
+        role: document.getElementById('regRole').value
+      };
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      logResponse('POST /api/auth/register', res.status, await res.json());
+    });
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {
+        username: document.getElementById('loginUser').value,
+        password: document.getElementById('loginPass').value
+      };
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      logResponse('POST /api/auth/login', res.status, data);
+      if (res.ok && data.user) {
+        sessionState.textContent = `Logged in as ${data.user.username} (${data.user.role})`;
+        sessionState.style.background = data.user.role === 'Admin' ? '#fef08a' : '#bbf7d0';
+      }
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      const res = await fetch('/api/auth/logout', { method: 'POST' });
+      logResponse('POST /api/auth/logout', res.status, await res.json());
+      sessionState.textContent = 'Unauthenticated (Guest)';
+      sessionState.style.background = '#e2e8f0';
+    });
+
+    async function callApi(endpoint) {
+      const res = await fetch(endpoint);
+      logResponse(`GET ${endpoint}`, res.status, await res.json());
+    }
+  </script>
+</body>
+</html>
